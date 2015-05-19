@@ -1,0 +1,61 @@
+Rpc = { }
+Rpc.__index = Rpc
+
+function Rpc.create(reactors)
+    local rpc = { }
+    setmetatable(rpc, Rpc)
+    rpc.reactors = reactors
+    return rpc
+end
+
+function Rpc:safeGetReactorById(id)
+    if(id == nil or type(id) ~= "string") then
+        return false
+    end
+    return self.reactors[id]
+end
+
+function Rpc:get_max_temp(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getMaxTemp()
+end
+
+function Rpc:get_temp(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getTemp()
+end
+
+function Rpc:get_temp_trend(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getOutput()
+end
+
+
+function Rpc:get_eu_output(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getOutput()
+end
+
+function Rpc:get_set_layout(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    local layout = react:getLayout()
+    if(not layout) then
+        return false
+    end
+    return layout:serialize()
+end

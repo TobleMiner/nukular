@@ -1,0 +1,63 @@
+Logger = { }
+Logger.__index = Logger
+
+Logger.ERROR = 1
+Logger.WARNING = 2
+Logger.INFO = 3
+Logger.DEBUG = 4
+Logger.VERBOSE = 5
+
+function Logger.create(id, level)
+    local logger = { }
+    setmetatable(logger, Logger)
+    if(level == nil) then
+        level = Logger.WARNING
+    end
+    logger.level = level
+    logger.id = id
+    return logger
+end
+
+function Logger:seperate(arg)
+    if(#arg == 0) then
+        return false
+    end
+    local level = Logger.INFO
+    local args = { }
+    fstring = ""
+    for i, v in pairs(arg) do
+        if(type(i) == "number") then
+            if(i == 1 and type(v) == "number") then
+                level = v
+            elseif(i == 1 or (i == 2 and type(arg[1]) == "number")) then
+                fstring = v
+            else
+                table.insert(args, v)
+            end
+        end
+    end
+    if(level > self.level) then
+        return false
+    end
+    return fstring, args
+end
+
+function Logger:log(...)
+    fstring, arg = self:seperate(arg)
+    if(not fstring) then
+        return
+    end
+    if(arg == nil) then
+        arg = { }
+    end
+    local str = string.format(fstring, unpack(arg))
+    if(self.id ~= nil) then
+        self:writeLine(string.format("[%s] %s", self.id, str))
+    else
+        self:writeLine(str)
+    end
+end
+
+function Logger:writeLine(str)
+    print(str)
+end

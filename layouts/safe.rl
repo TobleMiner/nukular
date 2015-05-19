@@ -1,0 +1,6 @@
+QQQvCavoC
+vvvAovova
+Covovovov
+avovovova
+vovovovoC
+aCovaCavo

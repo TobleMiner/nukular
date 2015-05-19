@@ -1,0 +1,107 @@
+os.loadAPI("util/logger")
+os.loadAPI("util/reactor")
+os.loadAPI("util/inventory")
+os.loadAPI("rpc/rpc")
+os.loadAPI("config/config")
+
+function setupReactor(id, react, config)
+    local log = logger.Logger.create(id, logger.Logger.DEBUG)
+    log:log("Initializing reactor")
+    local reactConf = config.reactors[id]
+    local layout = reactConf.layout
+    if(layout ~= nil) then
+        log:log("Loading layout \"%s\"", layout)
+        layout = reactor.Layout.fromFile(layout)
+        react:setLayout(layout)
+    end
+    threadReactor(log, config, id, react)
+end
+
+function threadReactor(log, config, id, react)
+    log:log("Control thread started")
+    local sink = config.reactors[id].dump_pos
+    local source = config.reactors[id].store_pos
+    local inv = inventory.Inventory.create(
+        peripheral.wrap(config.reactors[id].store_peripheral))
+    while(true) do
+        err, errmsg = pcall(function()
+            sleep(config.config.reactor_poll_interval)
+            if(config.reactors[id].layout_force) then
+                if(not react:checkLayout()) then
+                    log:log(logger.Logger.DEBUG, "Layout missmatch")
+                    if(react:applyLayout(inv, source, sink)) then
+                        log:log(logger.Logger.DEBUG, "Layout restore successful")
+                    else
+                        log:log(logger.Logger.ERROR, "Layout restore failed")
+                    end
+                end
+            end
+        end)
+        if(not err) then
+            log:log(logger.Logger.ERROR, "Error in control thread: %s", errmsg)
+        end
+    end
+end
+
+function threadReactorUi(log, config, react, ui, layout, gauge)
+    log:log("Ui update thread started")
+    while(true) do
+        sleep(config.config.reactor_poll_interval)
+        layout:update()
+        gauge:update()
+    end
+end
+
+function handleRpc(reacts, config)
+    local log = logger.Logger.create("RPC", logger.Logger.DEBUG)
+    rednet.open(config.config.modem_side)
+    local rpc = rpc.Rpc.create(reacts)
+    while(true) do
+        local id, msg = rednet.receive(config.config.rpc_channel)
+        if(config.config.rpc_whitelist == nil or config.config.rpc_whitelist[id]) then
+            local err, errmsg = pcall(function()
+                local call = textutils.unserialize(msg)
+                local fnc = call.fnc
+                local args = call.args
+                if(rpc[fnc] ~= nil and type(rpc[fnc]) == "function" and
+                    args ~= nil and type(args) == "table") then
+                    local err, res = pcall(rpc[fnc], rpc, unpack(args))
+                    if(err) then
+                        log:log(logger.Logger.DEBUG, "Processed RPC from %d", id)
+                        rednet.send(id, textutils.serialize(res))
+                    else
+                        log:log(logger.Logger.WARNING, "RPC threw error: %s", res)
+                        rednet.send(id, textutils.serialize(false))
+                    end
+                else
+                    log:log(logger.Logger.INFO,
+                        "RPC has invalid arguments: %s(%s)", totring(fnc),
+                        tostring(args))
+                    rednet.send(id, textutils.serialize(false))
+                end
+            end)
+            if(not err) then
+                log:log(logger.Logger.ERROR, "Failed to handle RPC: %s", errmsg)
+            end
+        end
+    end
+end
+
+local threads = { }
+local reacts = { }
+local log = logger.Logger.create("INIT", logger.Logger.DEBUG)
+log:log("Collecting reactors...")
+for k, v in pairs(config.reactors) do
+    local per = peripheral.wrap(v.reactor)
+    local react = reactor.Reactor.create(per)
+    reacts[k] = react
+    table.insert(threads, function() setupReactor(k, react, config) end)
+end
+
+if(config.config.rpc_enable) then
+    log:log("Enabling rpc interface")
+    table.insert(threads,
+        function() handleRpc(reacts, config) end)
+end
+
+parallel.waitForAll(unpack(threads))

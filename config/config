@@ -1,0 +1,21 @@
+config = {
+    ["reactor_poll_interval"] = 1,
+    ["rpc_enable"] = true,
+    ["rpc_whitelist"] = {
+        [9] = true
+    },
+    ["rpc_channel"] = "nukular_rpc",
+    ["modem_side"] = "right"
+}
+
+reactors = {
+    ["block_a"] = {
+        ["name"] = "Block A",
+        ["reactor"] = "nuclear_reactor_0",
+        ["dump_pos"] = "north",
+        ["store_pos"] = "south",
+        ["store_peripheral"] = "iron_0",
+        ["layout"] = "/layouts/safe.rl",
+        ["layout_force"] = true
+    }
+}
