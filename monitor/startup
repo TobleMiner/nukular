@@ -1,12 +1,13 @@
 local config = {
-    ["modem_side"] = "right",
+    ["modem_side"] = "top",
     ["whitelist"] = { --Ids of PCs allowed to reset/update this PC (optional)
-        [9] = true
+        [9] = true,
+        [12] = true
     },
     ["key"] = "1wi7i9h15p4rk73", --Secret key needed to reset/update this PC (optional)
     ["channel_update"] = "__update__", --Rednet protocol for updates
     ["channel_reset"] = "__reset__", --Rednet protocol for reset messages
-    ["default"] = "nukular" --Program to run
+    ["default"] = "nukular_mon" --Program to run
 }
 
 function prepareFs(file)

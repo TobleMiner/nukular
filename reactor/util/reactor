@@ -42,8 +42,8 @@ function Reactor:getMaxTemp()
     return self.reactor.getMaxHeat()
 end
 
-function Reactor.getTempTrend()
-    return self.tempRate
+function Reactor:getTempTrend()
+    return math.floor(self.tempRate * 100 + 0.5) / 100
 end
 
 function Reactor:getOutput()

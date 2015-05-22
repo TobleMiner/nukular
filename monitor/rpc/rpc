@@ -1,0 +1,128 @@
+Rpc = { }
+Rpc.__index = Rpc
+
+function Rpc.create(reactors)
+    local rpc = { }
+    setmetatable(rpc, Rpc)
+    rpc.reactors = reactors
+    return rpc
+end
+
+function Rpc:safeGetReactorById(id)
+    if(id == nil or type(id) ~= "string") then
+        return false
+    end
+    return self.reactors[id]
+end
+
+function Rpc:set_max_temp(id, temp)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    react:setMaxTemp(temp)
+    return true
+end
+
+function Rpc:set_temp(id, temp)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    react:setTemp(temp)
+    return true
+end
+
+function Rpc:set_temp_trend(id, trend)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    react:setOutput(trend)
+    return true
+end
+
+
+function Rpc:set_eu_output(id, eupt)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    react:setOutput(eupt)
+    return true
+end
+
+function Rpc:set_set_layout(id, layout)
+    local reactor = self:safeGetReactorById(id)
+    if(not reactor) then
+        return false
+    end
+    reactor:setLayout(layout)
+    return true
+end
+
+function Rpc:set_actual_layout(id, layout)
+    local reactor = self:safeGetReactorById(id)
+    if(not reactor) then
+        return false
+    end
+    reactor:setActualLayout(layout)
+    return true
+end
+
+function Rpc:get_max_temp(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getMaxTemp()
+end
+
+function Rpc:get_temp(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getTemp()
+end
+
+function Rpc:get_temp_trend(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getOutput()
+end
+
+
+function Rpc:get_eu_output(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    return react:getOutput()
+end
+
+function Rpc:get_set_layout(id)
+    local react = self:safeGetReactorById(id)
+    if(not react) then
+        return false
+    end
+    local layout = react:getLayout()
+    if(not layout) then
+        return false
+    end
+    return layout:serialize()
+end
+
+function Rpc:get_actual_layout(id)
+    local reactor = self:safeGetReactorById(id)
+    if(not reactor) then
+        return false
+    end
+    local layout = reactor:getActualLayout()
+    if(not layout) then
+        return false
+    end
+    return layout:serialize()
+end

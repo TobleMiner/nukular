@@ -1,0 +1,29 @@
+config = {
+    ["reactor_poll_interval"] = 1,
+    ["rpc_enable"] = false,
+    ["rpc_channel"] = "nukular_rpc",
+    ["rpc_whitelist"] = {
+        [12] = true,
+        [9] = true
+    },
+    ["rds_enable"] = true,
+    ["rds_whitelist"] = {
+        [12] = true,
+        [9] = true
+    },
+    ["modem_side"] = "top"
+}
+
+reactors = {
+    ["block_a"] = {
+        ["name"] = "Block A",
+        ["id"] = 12,
+        ["monitor_side"] = "right",
+        ["ui"] = {
+            ["name"] = true,
+            ["layout"] = true,
+            ["temp_gauge"] = true,
+            ["gauge_label"] = true
+        }
+    }
+}

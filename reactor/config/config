@@ -1,0 +1,31 @@
+config = {
+    ["reactor_poll_interval"] = 1,
+    ["rpc_enable"] = false,
+    ["rpc_whitelist"] = {
+        [9] = true,
+        [134] = true
+    },
+    ["rpc_channel"] = "nukular_rpc",
+    ["rds_enable"] = true,
+    ["rds_whitelist"] = {
+        [9] = true,
+        [134] = true
+    },
+    ["rds_reset"] = { },
+    ["modem_side"] = "back"
+}
+
+config.rds_reset = config.rds_whitelist
+
+reactors = {
+    ["block_a"] = {
+        ["name"] = "Block A",
+        ["reactor"] = "right",
+        ["dump_pos"] = "north",
+        ["store_pos"] = "up",
+        ["store_peripheral"] = "container_chest_0",
+        ["redstone_side"] = "bottom",
+        ["layout"] = "/layouts/safe.rl",
+        ["layout_force"] = false
+    }
+}

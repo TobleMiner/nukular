@@ -1,0 +1,320 @@
+Reactor = { }
+Reactor.__index = Reactor
+
+function Reactor.create(id, rid, config)
+    local reactor = { }
+	setmetatable(reactor, Reactor)
+    reactor.id = id
+    reactor.rid = rid
+    reactor.config = config
+    reactor.temp = 0
+    reactor.maxTemp = -1
+    reactor.tempTrend = 0
+    reactor.eupt = 0
+    reactor.layout = nil
+    reactor.actualLayout = nil
+    return reactor
+end
+
+function Reactor:performRpc(fnc, resfnc, resargs, ...)
+    local rpc = {
+        ["fnc"] = fnc,
+        ["args"] = { },
+        ["resfnc"] = resfnc,
+        ["resargs"] = resargs
+    }
+    rpc.args = arg
+    rednet.send(self.rid, textutils.serialize(rpc), self.config.config.rpc_channel)
+end
+
+function Reactor:update()
+    self:performRpc("get_max_temp", "set_max_temp", {self.id}, self.id)
+    self:performRpc("get_temp", "set_temp", {self.id}, self.id)
+    self:performRpc("get_temp_trend", "set_temp_trend", {self.id}, self.id)
+    self:performRpc("get_eu_output", "set_eu_output", {self.id}, self.id)
+    self:performRpc("get_set_layout", "set_set_layout", {self.id}, self.id)
+    self:performRpc("get_actual_layout", "set_actual_layout", {self.id}, self.id)
+end
+
+function Reactor:setTemp(temp)
+    self.temp = temp
+end
+
+function Reactor:getTemp()
+    return self.temp
+end
+
+function Reactor:setMaxTemp(temp)
+    self.maxTemp = temp
+end
+
+function Reactor:getMaxTemp()
+    return self.maxTemp
+end
+
+function Reactor:setTempTrend(trend)
+    self.tempTrend = trend
+end
+
+function Reactor:getTempTrend()
+    return self.tempTrend
+end
+
+function Reactor:setOutput(eupt)
+    self.eupt = eupt
+end
+
+function Reactor:getOutput()
+    return self.eupt
+end
+
+function Reactor:setLayout(layout)
+    if(type(layout) == "string") then
+        layout = Layout.unserialize(layout)
+    end
+    self.layout = layout
+end
+
+function Reactor:getLayout()
+    return self.layout
+end
+
+function Reactor:setActualLayout(layout)
+    if(type(layout) == "string") then
+        layout = Layout.unserialize(layout)
+    end
+    self.actualLayout = layout
+end
+
+function Reactor:getActualLayout()
+    return self.actualLayout
+end
+
+Layout = { }
+Layout.__index = Layout
+
+Layout.max_item_dmg = 8000
+
+Layout.lookup = {
+    ["S"] = "IC2:reactorUraniumSimple", --Single uranium fuel cell
+    ["D"] = "IC2:reactorUraniumDual", --Dual uranium fuel cell
+    ["Q"] = "IC2:reactorUraniumQuad", --Quad uranium fuel cell
+    ["s"] = "IC2:reactorUraniumSimpledepleted", --Single depleted uranium cell
+    ["d"] = "IC2:reactorUraniumDualdepleted", --Dual depleted uranium cell
+    ["q"] = "IC2:reactorUraniumQuaddepleted", --Quad depleted uranium cell
+    ["1"] = "IC2:reactorCoolantSimple", --10k coolant cell
+    ["3"] = "IC2:reactorCoolantTriple", --30k coolant cell
+    ["6"] = "IC2:reactorCoolantSix", --60k coolant cell
+    ["P"] = "IC2:reactorPlating", --Reactor plating
+    ["H"] = "IC2:reactorPlatingHeat", --Heat-Capacity reactor plating
+    ["c"] = "IC2:reactorPlatingExplosive", --Containment reactor plating
+    ["E"] = "IC2:reactorHeatSwitch", --Heat exchanger
+    ["R"] = "IC2:reactorHeatSwitchCore", --Reactor heat exchanger
+    ["C"] = "IC2:reactorHeatSwitchSpread", --Component heat exchanger
+    ["A"] = "IC2:reactorHeatSwitchDiamond", --Advanced heat exchanger
+    ["h"] = "IC2:reactorVent", --Heat vent
+    ["r"] = "IC2:reactorVentCore", --Reactor heat vent
+    ["o"] = "IC2:reactorVentGold", --Overclocked heat vent
+    ["v"] = "IC2:reactorVentSpread", --Component heat vent
+    ["a"] = "IC2:reactorVentDiamond", --Advanced heat vent
+    ["n"] = "IC2:reactorReflector", --Neutron reflector
+    ["N"] = "IC2:reactorReflectorThick", --Thick neutron reflector
+    ["b"] = "IC2:reactorCondensator", --RSH-Condensator
+    ["B"] = "IC2:reactorCondensatorLap"  --LZH-Condensator
+}
+
+Layout.reverseLookup = { }
+function Layout.genReverseLookup()
+    for k, v in pairs(Layout.lookup) do
+        Layout.reverseLookup[v] = k
+    end
+end
+Layout.genReverseLookup()
+
+Layout.dmgLookup = {
+    ["IC2:reactorUraniumSimple"] = 9998, --Single uranium fuel cell
+    ["IC2:reactorUraniumDual"] = 9998, --Dual uranium fuel cell
+    ["IC2:reactorUraniumQuad"] = 9998, --Quad uranium fuel cell
+    ["IC2:reactorUraniumSimpledepleted"] = nil, --Single depleted uranium cell
+    ["IC2:reactorUraniumDualdepleted"] = nil, --Dual depleted uranium cell
+    ["IC2:reactorUraniumQuaddepleted"] = nil, --Quad depleted uranium cell
+    ["IC2:reactorCoolantSimple"] = 8000, --10k coolant cell
+    ["IC2:reactorCoolantTriple"] = 8000, --30k coolant cell
+    ["IC2:reactorCoolantSix"] = 8000, --60k coolant cell
+    ["IC2:reactorPlating"] = nil, --Reactor plating
+    ["IC2:reactorPlatingHeat"] = nil, --Heat-Capacity reactor plating
+    ["IC2:reactorPlatingExplosive"] = nil, --Containment reactor plating
+    ["IC2:reactorHeatSwitch"] = 8000, --Heat exchanger
+    ["IC2:reactorHeatSwitchCore"] = 8000, --Reactor heat exchanger
+    ["IC2:reactorHeatSwitchSpread"] = 8000, --Component heat exchanger
+    ["IC2:reactorHeatSwitchDiamond"] = 8000, --Advanced heat exchanger
+    ["IC2:reactorVent"] = 8000, --Heat vent
+    ["IC2:reactorVentCore"] = 8000, --Reactor heat vent
+    ["IC2:reactorVentGold"] = 8000, --Overclocked heat vent
+    ["IC2:reactorVentSpread"] = nil, --Component heat vent
+    ["IC2:reactorVentDiamond"] = 8000, --Advanced heat vent
+    ["IC2:reactorReflector"] = 8000, --Neutron reflector
+    ["IC2:reactorReflectorThick"] = 8000, --Thick neutron reflector
+    ["IC2:reactorCondensator"] = 8000, --RSH-Condensator
+    ["IC2:reactorCondensatorLap"] = 8000  --LZH-Condensator
+}
+
+Layout.Stack = { }
+Layout.Stack.__index = Layout.Stack
+
+function Layout.Stack.create(id, qty, dmg, dmgMax)
+    local stack = { }
+    stack.id = id
+    stack.qty = qty
+    stack.dmg = dmg
+    stack.dmgMax = dmgMax
+    stack.char = " "
+    return stack
+end
+
+function Layout.create(width, height)
+    local layout = { }
+	setmetatable(layout, Layout)
+    layout.layout = { }
+    layout.width = width
+    layout.height = height
+    return layout
+end
+
+function Layout.fromFile(fname)
+    local layout = { }
+	setmetatable(layout, Layout)
+    layout.layout = { }
+    local flhndl = fs.open(fname, "r")
+    layout.width = 0
+    layout.height = 0
+    local line = flhndl.readLine()
+    while(line ~= nil) do
+        if(#line > 0) then
+            line = line:gsub("\r", ""):gsub("\n", "")
+            local row = { }
+            for i = 1, #line, 1 do
+                local stack = Layout.Stack.create()
+                stack.char = line:sub(i, i)
+                stack.qty = 1
+                stack.id = Layout.lookup[stack.char]
+                if(stack.id ~= nil) then
+                    stack.maxDmg = Layout.dmgLookup[stack.id]
+                end
+                table.insert(row, stack)
+            end
+            table.insert(layout.layout, row)
+            layout.width = math.max(layout.width, #row)
+            layout.height = layout.height + 1
+        end
+        line = flhndl.readLine()
+    end
+    return layout
+end
+
+function Layout.unserialize(str)
+    local rep = textutils.unserialize(str)
+    local layout = Layout.create(rep.width, rep.height)
+    layout.layout = rep.layout
+    return layout
+end
+
+function Layout.slotnumToGridSize(slotnum)
+    return slotnum / 6, 6
+end
+
+function Layout:XYtoPos(x, y)
+    return (y - 1) * self.width + x
+end
+
+function Layout:posToXY(pos)
+    local y = math.ceil(pos / self.width)
+    local x = pos - self.width * (y - 1)
+    return x, y
+end
+
+function Layout:getId(pos)
+    local x, y = self:posToXY(pos)
+    return self:getIdAt(x, y)
+end
+
+function Layout:getIdAt(x, y)
+    return self.layout[y][x].id
+end
+
+function Layout:serialize()
+    local rep = { }
+    rep.layout = self.layout
+    rep.width = self.width
+    rep.height = self.height
+    return textutils.serialize(rep)
+end
+
+function Layout:print(mon, x, y, seperators, layout, fgcolor, bgcolor)
+    if(fgcolor == nil) then
+        fgcolor = colors.white
+    end
+    if(bgcolor == nil) then
+        bgcolor = colors.black
+    end
+    mon.setCursorPos(x, y)
+    if(layout == nil) then
+        print("No data available")
+        return
+    end
+    for i, row in ipairs(self.layout) do
+        if(seperators) then
+            if(i ~= 1) then
+                mon.setTextColor(fgcolor)
+                mon.setBackgroundColor(bgcolor)
+                for j = 1, self.width * 2 - 1, 1 do
+                    if(j % 2 == 0 and j ~= self.width) then
+                        mon.write("+")
+                    else
+                        mon.write("-")
+                    end
+                end
+            end
+            mon.setCursorPos(x, y + (i - 1) * 2)
+            for k, stack in ipairs(row) do
+                local itemStack = layout.layout[i][k]
+                if(itemStack.dmg ~= nil) then
+                    local color = colors.green
+                    local maxDmg = Layout.dmgLookup[itemStack.id]
+                    if(maxDmg ~= nil) then
+                        local relDmg = itemStack.dmg / maxDmg
+                        if(relDmg > 1/3) then
+                            color = colors.yellow
+                        elseif(relDmg > 2/3) then
+                            color = colors.red
+                        end
+                    end
+                    mon.setTextColor(color)
+                    if(itemStack.id == stack.id) then
+                        mon.setBackgroundColor(bgcolor)
+                    else
+                        mon.setBackgroundColor(colors.orange)
+                    end
+                elseif(stack.id ~= nil) then
+                    mon.setTextColor(fgcolor)
+                    mon.setBackgroundColor(colors.red)
+                else
+                    mon.setTextColor(fgcolor)
+                    mon.setBackgroundColor(bgcolor)
+                end
+                mon.write(itemStack.char)
+                if(k ~= self.width) then
+                    mon.setTextColor(fgcolor)
+                    mon.setBackgroundColor(bgcolor)
+                    mon.write("|")
+                end
+            end
+            mon.setCursorPos(x, y + i * 2 - 1)
+        else
+            for _,char in ipairs(row) do
+                mon.write(char)
+            end
+            mon.setCursorPos(x, y + i)
+        end
+    end
+end

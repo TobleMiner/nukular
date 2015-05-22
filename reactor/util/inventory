@@ -1,0 +1,47 @@
+Inventory = { }
+Inventory.__index = Inventory
+
+function Inventory.create(inventory)
+    local inv = { }
+    setmetatable(inv, Inventory)
+    inv.inv = inventory
+    return inv
+end
+
+function Inventory:findSlot(id, minsize, damage)
+    local size = self.inv.getInventorySize()
+    for i = 1, size, 1 do
+        local stack = self.inv.getStackInSlot(i)
+        if(stack ~= nil and id == stack.id and
+            (minsize == nil or minsize >= stack.qty) and
+            (damage == nil or damage == stack.dmg)) then
+            return i
+        end
+    end
+    return nil
+end
+
+function Inventory:pullStack(index, pos, num, targetIndex)
+    if(self.inv.pullItem(pos, index, num, targetIndex) ~= num) then
+        return false
+    end
+    return true
+end
+
+function Inventory:pushStack(index, pos, num, targetIndex)
+    local stack = self.inv.getStackInSlot(index)
+    if(stack ~= nil and self.inv.pushItem(pos, index, num, targetIndex) ~= stack.qty) then
+        return false
+    end
+    return true
+end
+
+function Inventory:pushAll(pos)
+    local size = self.inv.getInventorySize()
+    for i = 1, size, 1 do
+        if(not self:moveStack(i, pos)) then
+            return false
+        end
+    end
+    return true
+end

@@ -1,0 +1,176 @@
+os.loadAPI("util/logger")
+os.loadAPI("util/inventory")
+os.loadAPI("util/tui")
+os.loadAPI("util/reactor_rpc")
+os.loadAPI("rpc/rpc")
+os.loadAPI("config/config")
+os.loadAPI("remote/rds")
+
+function setupUi(uiMan, id, reactor, config)
+    local log = logger.Logger.create(id, logger.Logger.DEBUG)
+    log:log("Initializing ui")
+    local reactConf = config.reactors[id]
+    log:log("Creating ui")
+    width, height = uiMan:getMonitor().getSize()
+    local window = tui.Window.create(uiMan)
+    window:setSize(39, 26)
+    if(reactConf.ui["name"]) then
+        local label = tui.Label.create(uiMan)
+        label:setPos(2, 3)
+        label:setText(reactConf.name)
+        window:addChild(label)
+    end
+    local layout
+    if(reactConf.ui["layout"]) then
+        layout = tui.ReactorLayout.create(uiMan)
+        layout:setPos(4, 5)
+        window:addChild(layout)
+        layout:setReactor(reactor)
+    end
+    local gauge
+    if(reactConf.ui["temp_gauge"]) then
+        gauge = tui.ReactorTempGauge.create(uiMan)
+        gauge:setSize(32, 2)
+        gauge:setPos(3, 22)
+        window:addChild(gauge)
+        gauge:setReactor(reactor)
+    end
+    local label
+    if(reactConf.ui["gauge_label"]) then
+        label = tui.Label.create(uiMan)
+        label:setPos(4, 23)
+        label:setDataSource(function() return string.format("%d degC",
+            reactor:getTemp()) end)
+        window:addChild(label)
+    end
+    parallel.waitForAll(
+        function() uiMan:renderThread() end,
+        function() uiMan:touchThread() end,
+        function() threadReactorUi(log, config, reactor, layout, gauge, label) end
+    )
+end
+
+function threadReactorUi(log, config, reactor, layout, gauge, label)
+    local rid = reactor.rid
+    local subTemp = rds.Subscriber.create(nil, function(_, val)
+        reactor:setTemp(tonumber(val)) end)
+    subTemp:subscribe(rid, reactor.id..".temp")
+    local subTempMax = rds.Subscriber.create(nil, function(_, val)
+        reactor:setMaxTemp(tonumber(val)) end)
+    subTempMax:subscribe(rid, reactor.id..".temp_max")
+    local subTempTrend = rds.Subscriber.create(nil, function(_, val)
+        reactor:setTempTrend(tonumber(val)) end)
+    subTempTrend:subscribe(rid, reactor.id..".temp_trend")
+    local subLayout = rds.Subscriber.create(nil, function(_, val)
+            if(val) then
+                reactor:setLayout(reactor_rpc.Layout.unserialize(val))
+            end
+        end)
+    subLayout:subscribe(rid, reactor.id..".layout")
+    local subLayoutNow = rds.Subscriber.create(nil, function(_, val)
+            if(val) then
+                reactor:setActualLayout(reactor_rpc.Layout.unserialize(val))
+            end
+        end)
+    subLayoutNow:subscribe(rid, reactor.id..".layout_now")
+    log:log("Ui update thread started")
+    while(true) do
+        if(config.config.rpc_enable) then
+            reactor:update()
+        end
+        sleep(config.config.reactor_poll_interval)
+        if(layout ~= nil) then
+            layout:update()
+        end
+        if(gauge ~= nil) then
+            gauge:update()
+        end
+        if(label ~= nil) then
+            label:update()
+        end
+    end
+end
+
+function handleRpc(reacts, config)
+    local log = logger.Logger.create("RPC", logger.Logger.DEBUG)
+    rednet.open(config.config.modem_side)
+    local rpc = rpc.Rpc.create(reacts)
+    log:log("Listening for RPCs")
+    while(true) do
+        local id, msg = rednet.receive(config.config.rpc_channel)
+        if(config.config.rpc_whitelist == nil or config.config.rpc_whitelist[id]) then
+            local err, errmsg = pcall(function()
+                local call = textutils.unserialize(msg)
+                local fnc = call.fnc
+                local args = call.args
+                local resfnc = call.resfnc
+                local resargs = call.resargs
+                if(rpc[fnc] ~= nil and type(rpc[fnc]) == "function" and
+                    args ~= nil and type(args) == "table") then
+                    local err, res = pcall(rpc[fnc], rpc, unpack(args))
+                    local response = {
+                        ["fnc"] = resfnc,
+                        ["args"] = resargs
+                    }
+                    if(err) then
+                        log:log(logger.Logger.DEBUG, "Processed RPC from %d", id)
+                        if(resfnc ~= nil) then
+                            if(type(res) ~= "table") then
+                                table.insert(response.args, res)
+                            else
+                                for _, v in pairs(res) do
+                                    table.insert(response.args, v)
+                                end
+                            end
+                            rednet.send(id, textutils.serialize(response),
+                                config.config.rpc_channel)
+                        end
+                    else
+                        log:log(logger.Logger.WARNING, "RPC threw error: %s", res)
+                        response.args = false
+                        rednet.send(id, textutils.serialize(response),
+                            config.config.rpc_channel)
+                    end
+                else
+                    log:log(logger.Logger.INFO,
+                        "RPC has invalid arguments: %s(%s), %s", tostring(fnc),
+                        tostring(unpack(args)), res)
+                end
+            end)
+            if(not err) then
+                log:log(logger.Logger.ERROR, "Failed to handle RPC: %s", errmsg)
+            end
+        end
+    end
+end
+
+local threads = { }
+local reactors = { }
+local uiManagers = { }
+local log = logger.Logger.create("INIT", logger.Logger.DEBUG)
+log:log("Collecting reactor UIs...")
+for k, v in pairs(config.reactors) do
+    local reactor = reactor_rpc.Reactor.create(k, v.id, config)
+    reactors[k] = reactor
+    local side = v.monitor_side
+    local uiMan = uiManagers[side]
+    if(uiMan == nil) then
+        uiMan = tui.Tui.create(side)
+        uiManagers[side] = uiMan
+    end
+    table.insert(threads, function() setupUi(uiMan, k, reactor, config) end)
+end
+
+if(config.config.rpc_enable) then
+    log:log("Enabling rpc interface")
+    table.insert(threads,
+        function() handleRpc(reacts, config) end)
+end
+
+if(config.config.rds_enable) then
+    log:log("Enabling rds interface")
+    table.insert(threads,
+        function() rds.listen(config.config.rds_whitelist) end)
+end
+
+parallel.waitForAll(unpack(threads))

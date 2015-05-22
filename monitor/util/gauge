@@ -1,0 +1,124 @@
+Gauge = { }
+Gauge.__index = Gauge
+
+function Gauge.create(x, y, width, height, vertical, bgcolor, fgcolor, min, max, val)
+    local gauge = { }
+	setmetatable(gauge, Gauge)
+    gauge.x = x
+    gauge.y = y
+    gauge.width = width
+    gauge.height = height
+    gauge.vertical = vertical
+    gauge.bgcolor = bgcolor
+    gauge.fgcolor = fgcolor
+    gauge.min = min
+    gauge.max = max
+    gauge.val = val
+    if(val == nil) then
+        gauge.val = 0
+    end
+    gauge.labelOffsetX = 2
+    gauge.labelOffsetY = 2
+    gauge.labelColor = 0
+    gauge.labelText = ""
+	return gauge
+end
+
+function Gauge:renderBg(glass, force)
+    if(self.bg == nil or ((type(self.bgcolor) == "string") ~= self.bgtexture) or force) then
+        if(self.bg ~= nil) then
+            self.bg.setVisible(false)
+        end
+        if(type(self.bgcolor) == "string") then
+            self.bg = glass.addLiquid(0, 0, 0, 0, "water")
+            self.bgtexture = true
+        else
+            self.bg = glass.addBox(0, 0, 0, 0, 0, 0)
+            self.bgtexture = false
+        end
+    end
+    if(self.bgtexture) then
+        self.bg.setX(self.x)
+        self.bg.setY(self.y)
+        self.bg.setWidth(self.width)
+        self.bg.setHeight(self.height)
+        self.bg.setFluid(self.bgcolor)
+    else
+        local opacity = bit.band(bit.brshift(bit.band(self.bgcolor, 0xFF000000), 24), 0xFF) / 0xFF
+        local color = bit.band(self.bgcolor, 0xFFFFFF)
+        self.bg.setOpacity(opacity)
+        self.bg.setColor(color)
+        self.bg.setX(self.x)
+        self.bg.setY(self.y)
+        self.bg.setWidth(self.width)
+        self.bg.setHeight(self.height)
+    end
+end
+
+function Gauge:renderFg(glass, force)
+    local width = self.width
+    local height = self.height
+    if(self.vertical) then
+        height = (self.val - self.min) / self.max * height
+    else
+        width = (self.val - self.min) / self.max * width
+    end
+    if(self.fg == nil or ((type(self.fgcolor) == "string") ~= self.fgtexture) or force) then
+        if(self.fg ~= nil) then
+            self.fg.setVisible(false)
+        end
+        if(type(self.fgcolor) == "string") then
+            self.fg = glass.addLiquid(0, 0, 0, 0, "water")
+            self.fgtexture = true
+        else
+            self.fg = glass.addBox(0, 0, 0, 0, 0, 0)
+            self.fgtexture = false
+        end
+    end
+    if(self.fgtexture) then
+        self.fg.setX(self.x)
+        self.fg.setY(self.y + self.height - height)
+        self.fg.setWidth(width)
+        self.fg.setHeight(height)
+        self.fg.setFluid(self.fgcolor)
+    else
+        local opacity = bit.band(bit.brshift(bit.band(self.fgcolor, 0xFF000000), 24), 0xFF) / 0xFF
+        local color = bit.band(self.fgcolor, 0xFFFFFF)
+        self.fg.setOpacity(opacity)
+        self.fg.setColor(color)
+        self.fg.setX(self.x)
+        self.fg.setY(self.y + self.height - height)
+        self.fg.setWidth(width)
+        self.fg.setHeight(height)
+    end
+end
+
+function Gauge:renderLabel(glass, force)
+    if(self.label == nil  or force) then
+        if(self.label ~= nil) then
+            self.label.setVisible(false)
+        end
+        self.label = glass.addText(0, 0, "", 0)
+    end
+    local offsetX = 0
+    local offsetY = 0
+    if(self.vertical) then
+        offsetX = self.width
+    else
+        offsetY = self.height
+    end
+    self.label.setX(self.x + self.labelOffsetX + offsetX)
+    self.label.setY(self.y + self.labelOffsetY + offsetY)
+    local text = self.labelText:gsub("{min}", tostring(self.min))
+    text = text:gsub("{max}", tostring(self.max))
+    text = text:gsub("{val}", tostring(self.val))
+    self.label.setText(text)
+    self.label.setColor(self.labelColor)
+    self.label.setVisible(#self.labelText > 0)
+end
+
+function Gauge:render(glass, force)
+    self:renderBg(glass, force)
+    self:renderFg(glass, force)
+    self:renderLabel(glass, force)
+end

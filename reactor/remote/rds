@@ -1,0 +1,176 @@
+local KEY_ACTION = "action"
+local KEY_SOURCE_ID = "source"
+local KEY_VALUE = "value"
+
+local CHANNEL = "remote_data_source"
+
+local ACTIONS = {
+    ["subscribe"] = "subscribe",
+    ["unsubscribe"] = "unsubscribe",
+    ["update"] = "update"
+}
+
+local log = {
+    ["log"] = function(self, ...)
+            if(#arg == 1) then
+                print(tostring(arg[1]))
+            elseif(#arg > 1) then
+                local offset = 1
+                if(type(arg[1]) == "number") then
+                    offset = 2
+                end
+                if(offset >= #arg) then
+                    return
+                end
+                print(string.format(arg[offset], unpack(arg, offset + 1)))
+            end
+        end
+}
+if(logger ~= nil) then
+    log = logger.Logger.create("RDS", logger.Logger.INFO)
+else
+    logger = {
+        ["Logger"] = {
+            ["ERROR"] = 1,
+            ["WARNING"] = 2,
+            ["INFO"] = 3,
+            ["DEBUG"] = 4,
+            ["VERBOSE"] = 5
+        }
+    }
+end
+
+local sources = { }
+
+local subscribers = { }
+
+function listen(id_whitelist)
+    while(true) do
+        id, msg = rednet.receive(CHANNEL)
+        err, errmsg = pcall(function()
+            if(not id_whitelist or id_whitelist[id]) then
+                local data = textutils.unserialize(msg)
+                local action = data[KEY_ACTION]
+                if(action == ACTIONS.subscribe) then
+                    local sub = Subscriber.create(id)
+                    local source_id = data[KEY_SOURCE_ID]
+                    log:log("%d just subscribed to %s",
+                        id, source_id)
+                    local src = sources[source_id]
+                    src:subscribe(sub)
+                elseif(action == ACTIONS.unsubscribe) then
+                    local source_id = data[KEY_SOURCE_ID]
+                    log:log("%d just unsubscribed from %s",
+                        id, source_id)
+                    local src = sources[source_id]
+                    src:unsubscribe(id)
+                elseif(action == ACTIONS.update) then
+                    local source_id = data[KEY_SOURCE_ID]
+                    log:log(logger.Logger.DEBUG, "Received update for %s from %d",
+                        source_id, id)
+                    local value = data[KEY_VALUE]
+                    local subscribers = subscribers[id][source_id]
+                    for _, v in pairs(subscribers) do
+                        v:update(source_id, value)
+                    end
+                end
+            end
+        end)
+        if(not err) then
+            log:log(logger.Logger.WARNING, "Error in listen thread: %s", errmsg)
+        end
+    end
+end
+
+Source = { }
+Source.__index = Source
+
+function Source.create(id, initial)
+    local src = { }
+    setmetatable(src, Source)
+    src.id = id
+    src.value = initial
+    src.subscribers = { }
+    sources[id] = src
+    return src
+end
+
+function Source:subscribe(sub)
+    self.subscribers[sub.id] = sub
+    sub:updateSource(self)
+end
+
+function Source:unsubscribe(sub)
+    self.subscribers[sub.id] = nil
+end
+
+function Source:update(value, force)
+    if(self.value ~= value or force) then
+        self.value = value
+        for _, v in pairs(self.subscribers) do
+            v:updateSource(self)
+        end
+    end
+end
+
+Subscriber = { }
+Subscriber.__index = Subscriber
+
+function Subscriber.create(id, callback)
+    local sub = { }
+    setmetatable(sub, Subscriber)
+    sub.id = id
+    sub.callback = callback
+    return sub
+end
+
+function Subscriber:subscribe(id, source_id)
+    if(not subscribers[id]) then
+        subscribers[id] = { }
+    end
+    if(not subscribers[id][source_id]) then
+        subscribers[id][source_id] = { }
+    end
+    table.insert(subscribers[id][source_id], self)
+    local msg = {
+        [KEY_ACTION] = ACTIONS.subscribe,
+        [KEY_SOURCE_ID] = source_id
+    }
+    log:log(logger.Logger.INFO, "Subscribing to %s on %d", source_id, id)
+    rednet.send(id, textutils.serialize(msg), CHANNEL)
+end
+
+function Subscriber:unsubscribe(id, source_id)
+    if(subscribers[id] and subscribers[id][source_id]) then
+        for i, v in pairs(subscribers) do
+            if(v == self) then
+                subscribers[id][source_id][i] = nil
+            end
+        end
+    end
+    local msg = {
+        [KEY_ACTION] = ACTIONS.unsubscribe,
+        [KEY_SOURCE_ID] = source_id
+    }
+    log:log(logger.Logger.INFO, "Unsubscribing from %s on %d", source_id, id)
+    rednet.send(id, textutils.serialize(msg), CHANNEL)
+end
+
+function Subscriber:update(source_id, value)
+    if(self.callback) then
+        log:log(logger.Logger.DEBUG, "Updating %s", source_id)
+        err, errmsg = pcall(self.callback, source_id, value)
+        if(not err) then
+            log:log(logger.Logger.ERROR, "Subscriber callback failed: %s", errmsg)
+        end
+    end
+end
+
+function Subscriber:updateSource(src)
+    local msg = {
+        [KEY_ACTION] = ACTIONS.update,
+        [KEY_SOURCE_ID] = src.id,
+        [KEY_VALUE] = src.value
+    }
+    rednet.send(self.id, textutils.serialize(msg), CHANNEL)
+end

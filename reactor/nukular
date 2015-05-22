@@ -1,8 +1,11 @@
 os.loadAPI("util/logger")
 os.loadAPI("util/reactor")
 os.loadAPI("util/inventory")
+os.loadAPI("util/tui")
 os.loadAPI("rpc/rpc")
 os.loadAPI("config/config")
+os.loadAPI("remote/rds")
+os.loadAPI("remote/redctl")
 
 function setupReactor(id, react, config)
     local log = logger.Logger.create(id, logger.Logger.DEBUG)
@@ -23,18 +26,42 @@ function threadReactor(log, config, id, react)
     local source = config.reactors[id].store_pos
     local inv = inventory.Inventory.create(
         peripheral.wrap(config.reactors[id].store_peripheral))
+    local reactConf = config.reactors[id]
+    local sourceTemp = rds.Source.create(id..".temp", 0)
+    local sourceTempMax = rds.Source.create(id..".temp_max", -1)
+    local sourceTempTrend = rds.Source.create(id..".temp_trend", 0)
+    local sourceLayout = rds.Source.create(id..".layout", nil)
+    local sourceLayoutNow = rds.Source.create(id..".layout_now", nil)
     while(true) do
         err, errmsg = pcall(function()
             sleep(config.config.reactor_poll_interval)
+            local temp = react:getTemp()
+            local tempMax = react:getMaxTemp()
+            local tempOk = temp < tempMax / 2;
+            local layoutOk = true;
             if(config.reactors[id].layout_force) then
                 if(not react:checkLayout()) then
+                    layoutOk = false
                     log:log(logger.Logger.DEBUG, "Layout missmatch")
                     if(react:applyLayout(inv, source, sink)) then
                         log:log(logger.Logger.DEBUG, "Layout restore successful")
+                        layoutOk = true
                     else
                         log:log(logger.Logger.ERROR, "Layout restore failed")
                     end
                 end
+            end
+            rs.setOutput(reactConf.redstone_side, tempOk and layoutOk)
+            sourceTemp:update(temp)
+            sourceTempMax:update(tempMax)
+            sourceTempTrend:update(react:getTempTrend())
+            local layout = react:getLayout()
+            if(layout) then
+                sourceLayout:update(layout:serialize())
+            end
+            local layoutNow = react:toLayout()
+            if(layoutNow) then
+                sourceLayoutNow:update(layoutNow:serialize())
             end
         end)
         if(not err) then
@@ -43,19 +70,11 @@ function threadReactor(log, config, id, react)
     end
 end
 
-function threadReactorUi(log, config, react, ui, layout, gauge)
-    log:log("Ui update thread started")
-    while(true) do
-        sleep(config.config.reactor_poll_interval)
-        layout:update()
-        gauge:update()
-    end
-end
-
 function handleRpc(reacts, config)
     local log = logger.Logger.create("RPC", logger.Logger.DEBUG)
     rednet.open(config.config.modem_side)
     local rpc = rpc.Rpc.create(reacts)
+    log:log("Listening for RPCs")
     while(true) do
         local id, msg = rednet.receive(config.config.rpc_channel)
         if(config.config.rpc_whitelist == nil or config.config.rpc_whitelist[id]) then
@@ -63,21 +82,38 @@ function handleRpc(reacts, config)
                 local call = textutils.unserialize(msg)
                 local fnc = call.fnc
                 local args = call.args
+                local resfnc = call.resfnc
+                local resargs = call.resargs
                 if(rpc[fnc] ~= nil and type(rpc[fnc]) == "function" and
                     args ~= nil and type(args) == "table") then
                     local err, res = pcall(rpc[fnc], rpc, unpack(args))
+                    local response = {
+                        ["fnc"] = resfnc,
+                        ["args"] = resargs
+                    }
                     if(err) then
                         log:log(logger.Logger.DEBUG, "Processed RPC from %d", id)
-                        rednet.send(id, textutils.serialize(res))
+                        if(resfnc ~= nil) then
+                            if(type(res) ~= "table") then
+                                table.insert(response.args, res)
+                            else
+                                for _, v in pairs(res) do
+                                    table.insert(response.args, v)
+                                end
+                            end
+                            rednet.send(id, textutils.serialize(response),
+                                config.config.rpc_channel)
+                        end
                     else
                         log:log(logger.Logger.WARNING, "RPC threw error: %s", res)
-                        rednet.send(id, textutils.serialize(false))
+                        response.args = false
+                        rednet.send(id, textutils.serialize(response),
+                            config.config.rpc_channel)
                     end
                 else
                     log:log(logger.Logger.INFO,
-                        "RPC has invalid arguments: %s(%s)", totring(fnc),
-                        tostring(args))
-                    rednet.send(id, textutils.serialize(false))
+                        "RPC has invalid arguments: %s(%s), %s", tostring(fnc),
+                        tostring(args), tostring(res))
                 end
             end)
             if(not err) then
@@ -102,6 +138,21 @@ if(config.config.rpc_enable) then
     log:log("Enabling rpc interface")
     table.insert(threads,
         function() handleRpc(reacts, config) end)
+end
+
+if(config.config.rds_enable) then
+    log:log("Enabling rds interface")
+    table.insert(threads,
+        function() rds.listen(config.config.rds_whitelist) end)
+    table.insert(threads, function()
+        if(config.config.rds_reset) then
+            print("Resetting rds devices")
+            redctl.init(config.config.modem_side)
+            for k in pairs(config.config.rds_reset) do
+                redctl.reset(k)
+            end
+        end
+    end)
 end
 
 parallel.waitForAll(unpack(threads))

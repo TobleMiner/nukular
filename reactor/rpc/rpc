@@ -59,3 +59,15 @@ function Rpc:get_set_layout(id)
     end
     return layout:serialize()
 end
+
+function Rpc:get_actual_layout(id)
+    local reactor = self:safeGetReactorById(id)
+    if(not reactor) then
+        return false
+    end
+    local layout = reactor:toLayout()
+    if(not layout) then
+        return false
+    end
+    return layout:serialize()
+end
